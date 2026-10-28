@@ -24,6 +24,11 @@ safe-outputs:
 Analyze pull request #${{ github.event.pull_request.number }} and recommend a semantic-versioning
 bump for each plugin under `plugins/*/` that this PR touches.
 
+This workflow is scoped to `plugins/**` via its `paths:` filter, so it only runs when a push's diff
+touches a plugin. `semver-bump-advisor-cleanup.md` is a separate, unfiltered workflow that handles the
+opposite transition — a later push that removes all plugin changes from a PR that previously had an
+advisory comment — since this workflow's path filter means it can't see that case itself.
+
 ## Task
 
 1. Discover plugins on **both** revisions of this PR, not just the head:
