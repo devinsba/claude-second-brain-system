@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "A Second Brain System built around Claude Code",
-    "version": "v0.0.1"
+    "version": "0.0.1"
   },
   "plugins": [
     {
       "name": "brain",
       "source": "./plugins/brain",
       "description": "Second Brain plugin for Claude Code",
-      "version": "v0.0.1"
+      "version": "0.0.1"
     }
   ]
 }
