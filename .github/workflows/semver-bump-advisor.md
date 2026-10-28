@@ -15,7 +15,7 @@ tools:
 safe-outputs:
   add-comment:
     max: 1
-    hide-older-comments: true
+    replace-older-comments: true
     issues: false
 ---
 
