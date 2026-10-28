@@ -1,0 +1,18 @@
+{
+  "name": "claude-second-brain-system",
+  "owner": {
+    "name": "devinsba"
+  },
+  "metadata": {
+    "description": "A Second Brain System built around Claude Code",
+    "version": "0.0.1"
+  },
+  "plugins": [
+    {
+      "name": "brain",
+      "source": "./plugins/brain",
+      "description": "Second Brain plugin for Claude Code",
+      "version": "0.0.1"
+    }
+  ]
+}
