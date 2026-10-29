@@ -1,10 +1,8 @@
 ---
-description: Suggests a semver bump per plugin based on the content of this PR's changes and comments a summary table.
+description: Suggests a semver bump per plugin based on the content of this PR's changes and comments a summary table; retracts the recommendation if plugin changes are later removed.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths:
-      - "plugins/**"
 permissions:
   contents: read
   pull-requests: read
@@ -25,10 +23,16 @@ safe-outputs:
 Analyze pull request #${{ github.event.pull_request.number }} and recommend a semantic-versioning
 bump for each plugin under `plugins/*/` that this PR touches.
 
-This workflow is scoped to `plugins/**` via its `paths:` filter, so it only runs when a push's diff
-touches a plugin. `semver-bump-advisor-cleanup.md` is a separate, unfiltered workflow that handles the
-opposite transition — a later push that removes all plugin changes from a PR that previously had an
-advisory comment — since this workflow's path filter means it can't see that case itself.
+This workflow intentionally has **no `paths:` filter** and runs on every push to the PR. An earlier
+design split this into two workflows — one filtered to `plugins/**` for the analysis, one unfiltered
+for retracting a stale recommendation when a later push reverted all plugin changes. That split had
+real bugs: the two workflows used separate concurrency groups, so a stale analysis run could still
+post its comment after a newer push's cleanup run had already decided there was nothing to clean up;
+and the cleanup workflow's own "is any plugin still affected?" check was a cruder path-prefix test
+than this workflow's real base/head manifest discovery, so it could disagree with this workflow about
+whether a plugin was actually affected. Running everything here, once, under one concurrency group (so
+a new push cancels an in-flight run for the same PR) and one shared discovery step removes both
+problems.
 
 ## Task
 
@@ -46,11 +50,17 @@ advisory comment — since this workflow's path filter means it can't see that c
      it as **major** (removing a plugin breaks installation for anyone using it).
 2. Get the full diff for this PR (e.g. `gh pr diff ${{ github.event.pull_request.number }}`) and the
    list of changed files (`gh pr diff ${{ github.event.pull_request.number }} --name-only`).
-3. Group the changed files by plugin directory (`plugins/<name>/**`, matched/renamed per step 1).
-4. For each plugin, ignore commit messages entirely and classify the bump by reading the actual
-   content of the diff for that plugin's files. The question at every level is whether the change is
-   observable by someone *using* the plugin (installing it, invoking one of its skills/commands,
-   reading its manifest) — not whether some file changed:
+3. Group the changed files by the plugins discovered in step 1 (match each changed path to the plugin
+   directory, matched/renamed per step 1, that actually contains it). A changed path under `plugins/`
+   that isn't inside any discovered plugin's own directory (e.g. a stray `plugins/README.md`) doesn't
+   count as affecting a plugin.
+4. If no plugin from step 1 has any changed files attributed to it in step 3, this PR currently has no
+   plugin impact — go to step 7 (retraction path). Otherwise, continue to step 5 for each affected
+   plugin.
+5. For each affected plugin, ignore commit messages entirely and classify the bump by reading the
+   actual content of the diff for that plugin's files. The question at every level is whether the
+   change is observable by someone *using* the plugin (installing it, invoking one of its
+   skills/commands, reading its manifest) — not whether some file changed:
    - **major**: a skill, command, or other user-invocable capability the plugin publicly exposed was
      removed or renamed; such a capability's documented inputs, outputs, or invocation contract
      changed in a way that would break an existing caller; `plugin.json` dropped or incompatibly
@@ -68,8 +78,8 @@ advisory comment — since this workflow's path filter means it can't see that c
      patch.
    - If the diff mixes categories for one plugin, take the highest severity present (major > minor >
      patch).
-5. Plugins with no changed files on either revision get **none** — do not list them in the output.
-6. Post one PR comment (via the comment safe output) containing a single Markdown table:
+6. Post one PR comment (via the comment safe output) containing a single Markdown table, then stop
+   (do not continue to step 7):
 
    | Plugin | Current Version | Suggested Bump | Reasoning |
    |---|---|---|---|
@@ -79,6 +89,23 @@ advisory comment — since this workflow's path filter means it can't see that c
    - "Suggested Bump" is `major`, `minor`, or `patch`.
    - "Reasoning" is one short sentence describing the actual capability-level change that drove the
      decision (e.g. "adds a new recall skill" or "deletes the plugin, breaking existing installs").
+7. **Retraction path** (only reached from step 4, when no plugin is currently affected): check whether
+   a previous recommendation from this exact workflow is still showing on this PR. List this PR's
+   comments (e.g.
+   `gh api repos/{owner}/{repo}/issues/${{ github.event.pull_request.number }}/comments`) and look
+   for one that is both:
+   - authored by this workflow's own posting identity (the automation actor used for safe-output
+     writes, e.g. `github-actions[bot]` — not an arbitrary human or other bot), **and**
+   - contains this workflow's table header (`| Plugin | Current Version | Suggested Bump |
+     Reasoning |`).
 
-   If no plugin under `plugins/*/` has any changed files in this PR (on either revision), call `noop`
-   with a short reason instead of posting a comment.
+   A comment that merely quotes or discusses that header without being authored by this workflow's
+   own posting identity does not count, and must not be touched.
+
+   - If no such comment exists, there is nothing to retract: call `noop` with a short reason and stop.
+   - If one exists, replace its content (via the comment safe output — the same call used in step 6,
+     which updates that existing comment in place rather than creating a new one) with a short note
+     that no plugin is currently affected by this PR and the previous recommendation no longer
+     applies. Do not hide or minimize the comment: a hidden comment stays hidden even after a later
+     push's content update, so if this PR's plugin changes are reintroduced afterward, a hidden
+     comment would never become visible again.
