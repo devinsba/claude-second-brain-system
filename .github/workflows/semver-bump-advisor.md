@@ -42,16 +42,20 @@ later push removes all plugin changes — see step 4/7 below.
      `gh pr view ${{ github.event.pull_request.number || github.event.inputs.pr_number }} --json
      baseRefOid --jq .baseRefOid` (works whether this run was triggered by the PR itself or dispatched
      manually), then e.g. `gh api repos/{owner}/{repo}/contents/plugins?ref=<that-sha>`.
-   - Match plugins across base and head by directory name, and also detect renames (a plugin
-     directory that disappeared at one path and an equivalent plugin appeared at another path in the
-     same diff — treat that as the same plugin, not a deletion plus an addition).
-   - A plugin whose directory or manifest exists at the base but is gone at the head (deleted, not
-     renamed) is still in scope: use the base manifest's `version` as "Current Version" and classify
-     it as **major** (removing a plugin breaks installation for anyone using it).
+   - Match plugins across base and head by directory path only — do not attempt to detect renames.
+     If a plugin's directory moves, treat the old and new paths as two unrelated events: the old path
+     is a deletion (below) and the new path is a brand-new plugin with no base-revision history.
+   - A plugin whose directory or manifest exists at the base but is gone at the head is still in
+     scope: use the base manifest's `version` as "Current Version" and classify it as **major**
+     (removing a plugin breaks installation for anyone using it).
+   - A plugin whose directory or manifest exists at the head but not at the base — including the
+     destination path of what looks like a rename — has no prior release to compute a bump from.
+     Report its head manifest's `version` as "Current Version" with Suggested Bump `manual`: the
+     author committed that version directly in this PR, so accept it as-is instead of computing one.
 2. Get the full diff for this PR (e.g. `gh pr diff ${{ github.event.pull_request.number || github.event.inputs.pr_number }}`) and the
    list of changed files (`gh pr diff ${{ github.event.pull_request.number || github.event.inputs.pr_number }} --name-only`).
 3. Group the changed files by the plugins discovered in step 1 (match each changed path to the plugin
-   directory, matched/renamed per step 1, that actually contains it). A changed path under `plugins/`
+   directory, matched per step 1, that actually contains it). A changed path under `plugins/`
    that isn't inside any discovered plugin's own directory (e.g. a stray `plugins/README.md`) doesn't
    count as affecting a plugin.
 4. Branch here, and do exactly one of the two branches below — never both:
@@ -83,12 +87,14 @@ later push removes all plugin changes — see step 4/7 below.
 6. (Branch A only) Post one PR comment (via the comment safe output) containing a single Markdown
    table:
 
+   <!-- sync-with-step-7: this header must match the retraction-path match string in step 7 below -->
    | Plugin | Current Version | Suggested Bump | Reasoning |
    |---|---|---|---|
 
    - "Current Version" is the `version` from that plugin's base-revision `plugin.json` (or head, if
-     the plugin is new in this PR).
-   - "Suggested Bump" is `major`, `minor`, or `patch`.
+     the plugin is new in this PR — see step 1).
+   - "Suggested Bump" is `major`, `minor`, `patch`, or `manual` (for a plugin that's new at head with
+     no base revision to compute a bump from — see step 1).
    - "Reasoning" is one short sentence describing the actual capability-level change that drove the
      decision (e.g. "adds a new recall skill" or "deletes the plugin, breaking existing installs").
 7. (Branch B only) **Retraction path**: check whether a previous recommendation from this exact
@@ -98,6 +104,7 @@ later push removes all plugin changes — see step 4/7 below.
    - authored by a bot account — the comment author's `login` ends in `[bot]` (the safe-output write
      path always posts as a bot identity, e.g. `github-actions[bot]`; never match a human account
      regardless of what the comment body says), **and**
+   <!-- sync-with-step-6: must match the table header posted in step 6, or retraction silently stops matching old comments -->
    - contains this workflow's table header (`| Plugin | Current Version | Suggested Bump |
      Reasoning |`).
 
