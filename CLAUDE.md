@@ -15,6 +15,11 @@ Currently there is a single plugin, `brain` (`plugins/brain/`), intended to beco
 - `plugins/<plugin-name>/skills/` — where that plugin's skills live (one subdirectory per skill, each with a `SKILL.md`). A plugin can also define `commands/`, `agents/`, or `hooks/` directories following the same convention once those are introduced.
 - Keep plugin and marketplace `version` fields in sync when bumping a plugin's version — the marketplace entry is not derived automatically from the plugin manifest.
 
+## GitHub Agentic Workflows (gh-aw)
+
+- `.github/workflows/*.md` are gh-aw workflow sources; the matching `*.lock.yml` is generated — never hand-edit a `.lock.yml`. After editing a workflow `.md`, run `gh aw compile <workflow-name>` to regenerate its lock file and commit both.
+- In `.github/workflows/semver-bump-advisor.md`, the PR comment table header posted in step 6 and the retraction-path match string in step 7 must stay textually identical (each has a `sync-with-step-N` comment marking the other side) — the retraction logic finds its own prior comment by matching that exact header string, so an edit to one without the other makes retraction silently stop working instead of erroring.
+
 ## Installing / testing locally
 
 Users consume this repo via:
