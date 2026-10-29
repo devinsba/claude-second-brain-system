@@ -10,7 +10,7 @@ on:
         required: true
         type: number
 concurrency:
-  job-discriminator: ${{ inputs.pr_number || github.run_id }}
+  job-discriminator: ${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}
 permissions:
   contents: read
   pull-requests: read
